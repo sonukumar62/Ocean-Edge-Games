@@ -46,8 +46,19 @@ export async function checkDatabaseConnection() {
         : '',
     };
   } catch (error) {
-    return { connected: false, reason: explainConnectionError(error) };
-  }
+  console.error('[database] Connection failure:', {
+    name: error?.name,
+    code: error?.code,
+    message: error?.message,
+    causeCode: error?.cause?.code,
+    causeMessage: error?.cause?.message,
+  });
+
+  return {
+    connected: false,
+    reason: explainConnectionError(error),
+  };
+}
 }
 
 export async function query(text, values = []) {
