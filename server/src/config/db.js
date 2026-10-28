@@ -1,32 +1,71 @@
 import pg from 'pg';
 
 const { Pool } = pg;
+
 const databaseUrl = process.env.DATABASE_URL?.trim() || '';
 const hasPostgresUrl = /^postgres(?:ql)?:\/\//i.test(databaseUrl);
-const registrationTables = ['users', 'player_profiles', 'pending_registrations', 'sessions', 'admin_notifications'];
 
+const registrationTables = [
+  'users',
+  'player_profiles',
+  'pending_registrations',
+  'sessions',
+  'admin_notifications',
+];
 
+// Load the certificate from the server environment.
 const ca = process.env.SUPABASE_DB_CA
   ?.replace(/\\n/g, '\n')
   .trim();
 
+// Check the URL without printing credentials.
+const urlHasSslParameters =
+  /[?&](sslmode|sslrootcert|sslcert|sslkey)=/i.test(databaseUrl);
+
+console.log('[database SSL diagnostic]', {
+  nodeEnv: process.env.NODE_ENV,
+  certificateLoaded: Boolean(
+    ca?.includes('-----BEGIN CERTIFICATE-----') &&
+    ca?.includes('-----END CERTIFICATE-----')
+  ),
+  certificateLength: ca?.length ?? 0,
+  urlHasSslParameters,
+});
+
+// Avoid conflicting SSL settings in the connection URL and pg options.
+function removeSslUrlParameters(value) {
+  const url = new URL(value);
+
+  for (const key of [
+    'sslmode',
+    'sslrootcert',
+    'sslcert',
+    'sslkey',
+  ]) {
+    url.searchParams.delete(key);
+  }
+
+  return url.toString();
+}
+
+const connectionString = hasPostgresUrl
+  ? removeSslUrlParameters(databaseUrl)
+  : '';
+
+if (process.env.NODE_ENV === 'production' && !ca) {
+  console.error(
+    '[database] SUPABASE_DB_CA is missing or is not a PEM certificate.'
+  );
+}
+
 export const pool = hasPostgresUrl
   ? new Pool({
-      connectionString: databaseUrl,
+      connectionString,
       ssl:
         process.env.NODE_ENV === 'production'
           ? {
               rejectUnauthorized: true,
-              ca,
-              console.log('[database SSL diagnostic]', {
-  nodeEnv: process.env.NODE_ENV,
-  certificateLoaded:
-    Boolean(ca?.includes('-----BEGIN CERTIFICATE-----')) &&
-    Boolean(ca?.includes('-----END CERTIFICATE-----')),
-  certificateLength: ca?.length ?? 0,
-  urlHasSslParameters:
-    /[?&](sslmode|sslrootcert|sslcert|sslkey)=/i.test(databaseUrl),
-});
+              ...(ca ? { ca } : {}),
             }
           : undefined,
       max: 12,
@@ -34,84 +73,137 @@ export const pool = hasPostgresUrl
     })
   : null;
 
-
 function explainConnectionError(error) {
   const code = String(error?.code || '');
   const message = String(error?.message || '').toLowerCase();
 
-  if (code === 'ENOTFOUND' || code === 'EAI_AGAIN') return 'The database hostname could not be resolved. Check the host in DATABASE_URL and your network connection.';
-  if (code === 'ECONNREFUSED' || code === 'ETIMEDOUT') return 'The PostgreSQL server could not be reached. Check the host, port, Supabase project status, network allowlist, and internet connection.';
-  if (code === '28P01' || message.includes('password authentication failed')) return 'PostgreSQL rejected the database username or password. Copy the current database credentials from Supabase.';
-  if (code === '3D000') return 'The database name in DATABASE_URL does not exist. Use the database name shown in the Supabase connection details.';
-  if (message.includes('ssl') || message.includes('tls') || message.includes('certificate')) return 'The TLS/SSL connection failed. Check the Supabase connection mode and SSL settings.';
-  return `PostgreSQL did not respond successfully${code ? ` (${code})` : ''}. Check the Supabase connection string, credentials, network access, and SSL settings.`;
+  if (code === 'ENOTFOUND' || code === 'EAI_AGAIN') {
+    return 'The database hostname could not be resolved. Check DATABASE_URL.';
+  }
+
+  if (code === 'ECONNREFUSED' || code === 'ETIMEDOUT') {
+    return 'The database could not be reached. Check the host, port and Supabase status.';
+  }
+
+  if (code === '28P01' || message.includes('password authentication failed')) {
+    return 'PostgreSQL rejected the database username or password.';
+  }
+
+  if (code === '3D000') {
+    return 'The configured PostgreSQL database does not exist.';
+  }
+
+  if (
+    message.includes('ssl') ||
+    message.includes('tls') ||
+    message.includes('certificate')
+  ) {
+    return 'The TLS/SSL connection failed. Check the certificate and SSL configuration.';
+  }
+
+  return `PostgreSQL connection failed${code ? ` (${code})` : ''}.`;
 }
 
 export async function checkDatabaseConnection() {
   if (!databaseUrl) {
-    return { connected: false, reason: 'DATABASE_URL is missing or blank. Add the Supabase PostgreSQL connection string to the server environment.' };
+    return {
+      connected: false,
+      reason: 'DATABASE_URL is missing.',
+    };
   }
+
   if (!hasPostgresUrl) {
-    return { connected: false, reason: 'DATABASE_URL is not a PostgreSQL connection string. Use the URI beginning with postgres:// or postgresql:// from Supabase → Connect → URI; the https:// project URL is not a database connection string.' };
+    return {
+      connected: false,
+      reason: 'DATABASE_URL must be a PostgreSQL connection string.',
+    };
+  }
+
+  if (!pool) {
+    return {
+      connected: false,
+      reason: 'The PostgreSQL connection pool was not created.',
+    };
   }
 
   try {
-    await pool.query('select 1');
+    await pool.query('SELECT 1');
+
     const result = await pool.query(
-      `select table_name from information_schema.tables
-       where table_schema='public' and table_name=any($1::text[])`,
+      `SELECT table_name
+       FROM information_schema.tables
+       WHERE table_schema = 'public'
+       AND table_name = ANY($1::text[])`,
       [registrationTables],
     );
-    const present = new Set(result.rows.map((row) => row.table_name));
-    const missing = registrationTables.filter((table) => !present.has(table));
+
+    const present = new Set(
+      result.rows.map((row) => row.table_name),
+    );
+
+    const missing = registrationTables.filter(
+      (table) => !present.has(table),
+    );
+
     return {
       connected: true,
       schemaReady: missing.length === 0,
       reason: missing.length
-        ? `PostgreSQL is reachable, but required registration tables are missing: ${missing.join(', ')}. Apply database/migrations/001_initial.sql.`
+        ? `Missing registration tables: ${missing.join(', ')}. Check your database migrations.`
         : '',
     };
   } catch (error) {
-  console.error('[database] Connection failure:', {
-    name: error?.name,
-    code: error?.code,
-    message: error?.message,
-    causeCode: error?.cause?.code,
-    causeMessage: error?.cause?.message,
-  });
+    console.error('[database] Connection failure:', {
+      name: error?.name,
+      code: error?.code,
+      message: error?.message,
+      causeCode: error?.cause?.code,
+      causeMessage: error?.cause?.message,
+    });
 
-  return {
-    connected: false,
-    reason: explainConnectionError(error),
-  };
-}
+    return {
+      connected: false,
+      reason: explainConnectionError(error),
+    };
+  }
 }
 
 export async function query(text, values = []) {
   if (!pool) {
-    const error = new Error('Database is not configured. Set DATABASE_URL to the Supabase PostgreSQL connection string.');
+    const error = new Error(
+      'Database is not configured. Set DATABASE_URL.',
+    );
     error.status = 503;
     error.code = 'DATABASE_NOT_CONFIGURED';
     throw error;
   }
+
   return pool.query(text, values);
 }
 
 export async function withTransaction(work) {
   if (!pool) {
-    const error = new Error('Database is not configured. Set DATABASE_URL to the Supabase PostgreSQL connection string.');
+    const error = new Error(
+      'Database is not configured. Set DATABASE_URL.',
+    );
     error.status = 503;
     error.code = 'DATABASE_NOT_CONFIGURED';
     throw error;
   }
+
   const client = await pool.connect();
+
   try {
-    await client.query('begin');
+    await client.query('BEGIN');
     const result = await work(client);
-    await client.query('commit');
+    await client.query('COMMIT');
     return result;
   } catch (error) {
-    await client.query('rollback');
+    try {
+      await client.query('ROLLBACK');
+    } catch {
+      // Preserve the original error.
+    }
     throw error;
   } finally {
     client.release();
