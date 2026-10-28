@@ -14,9 +14,24 @@ const registrationTables = [
 ];
 
 // Load the certificate from the server environment.
-const ca = process.env.SUPABASE_DB_CA
-  ?.replace(/\\n/g, '\n')
-  .trim();
+
+const rawCa = process.env.SUPABASE_DB_CA?.trim() || '';
+
+let ca = '';
+
+if (rawCa) {
+  const decodedCa = rawCa.includes('-----BEGIN CERTIFICATE-----')
+    ? rawCa.replace(/\\n/g, '\n')
+    : Buffer.from(rawCa, 'base64').toString('utf8').trim();
+
+  if (
+    decodedCa.includes('-----BEGIN CERTIFICATE-----') &&
+    decodedCa.includes('-----END CERTIFICATE-----')
+  ) {
+    ca = decodedCa;
+  }
+}
+
 
 // Check the URL without printing credentials.
 const urlHasSslParameters =
