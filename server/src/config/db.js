@@ -5,9 +5,26 @@ const databaseUrl = process.env.DATABASE_URL?.trim() || '';
 const hasPostgresUrl = /^postgres(?:ql)?:\/\//i.test(databaseUrl);
 const registrationTables = ['users', 'player_profiles', 'pending_registrations', 'sessions', 'admin_notifications'];
 
+
+const ca = process.env.SUPABASE_DB_CA
+  ?.replace(/\\n/g, '\n')
+  .trim();
+
 export const pool = hasPostgresUrl
-  ? new Pool({ connectionString: databaseUrl, ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: true } : undefined, max: 12, connectionTimeoutMillis: 5000 })
+  ? new Pool({
+      connectionString: databaseUrl,
+      ssl:
+        process.env.NODE_ENV === 'production'
+          ? {
+              rejectUnauthorized: true,
+              ca,
+            }
+          : undefined,
+      max: 12,
+      connectionTimeoutMillis: 10000,
+    })
   : null;
+
 
 function explainConnectionError(error) {
   const code = String(error?.code || '');
