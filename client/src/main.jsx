@@ -168,8 +168,122 @@ function Login({adminMode=false}){
   return <AuthFrame eyebrow={adminMode?'SECURE ADMIN ACCESS':'WELCOME BACK'} title={adminMode?'Admin sign in':'Back in the game.'} copy={adminMode?'Sign in to the Ocean Edge operations console.':'Pick up where your last match left off.'}><form className="form-stack" onSubmit={submit}><label>Email address<input type="email" value={form.email} readOnly={adminMode} required autoComplete="username" onChange={e=>setForm({...form,email:e.target.value})}/></label><label>Password<input type="password" value={form.password} required autoComplete="current-password" onChange={e=>setForm({...form,password:e.target.value})}/></label>{error&&<FormError>{error}</FormError>}<button className="button form-submit" disabled={busy}>{busy?'Signing in…':adminMode?'Enter admin console':'Sign in'} <ArrowRight size={16}/></button>{!adminMode&&<div className="form-inline"><Link to="/forgot-password">Forgot password?</Link><span>No account? <Link to="/register">Join free</Link></span></div>}</form></AuthFrame>;
 }
 
-function Register(){const navigate=useNavigate();const [form,setForm]=useState({email:'',password:'',confirmPassword:''});const [error,setError]=useState('');const [busy,setBusy]=useState(false);const submit=async e=>{e.preventDefault();setError('');if(form.password!==form.confirmPassword){setError('Passwords do not match.');return;}setBusy(true);try{const result=await send('/auth/register',form);sessionStorage.setItem('oeg-verification-email',form.email);sessionStorage.setItem('oeg-resend-after',result.resendAfter||'');if(result.profileSetupRequired)sessionStorage.setItem('oeg-profile-verified','yes');navigate('/verify-email');}catch(err){setError(err.message);}finally{setBusy(false);}};
-  return <AuthFrame eyebrow="CREATE YOUR PLAYER ID" title="Your next chapter starts here." copy="Set up your login, verify your email, and finish your player profile."><form className="form-stack" onSubmit={submit}><label>Email address<input type="email" required autoComplete="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})}/></label><label>Password<input type="password" required minLength="10" autoComplete="new-password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})}/><small>10+ characters, upper and lower case, and a number.</small></label><label>Confirm password<input type="password" required autoComplete="new-password" value={form.confirmPassword} onChange={e=>setForm({...form,confirmPassword:e.target.value})}/></label>{error&&<FormError>{error}</FormError>}<button className="button form-submit" disabled={busy}>{busy?'Sending code…':'Continue to email verification'} <ArrowRight size={16}/></button><div className="form-inline">Already registered? <Link to="/login">Sign in</Link></div></form></AuthFrame>;
+function Register() {
+  const navigate = useNavigate();
+
+  const [form, setForm] = useState({
+    email: '',
+    password: '',
+    confirmPassword: '',
+  });
+
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setError('');
+
+    if (form.password !== form.confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+
+    setBusy(true);
+
+    try {
+      const result = await send('/auth/register', form);
+
+      sessionStorage.setItem(
+        'oeg-verification-email',
+        form.email
+      );
+
+      sessionStorage.setItem(
+        'oeg-resend-after',
+        result.resendAfter || ''
+      );
+
+      // Clear any verification flag left by a previous attempt.
+      sessionStorage.removeItem('oeg-profile-verified');
+
+      // Skip OTP only when the backend confirms that this
+      // registration was already verified.
+      if (result.profileSetupRequired === true) {
+        sessionStorage.setItem('oeg-profile-verified', 'yes');
+      }
+
+      navigate('/verify-email');
+    } catch (err) {
+      setError(err.message || 'Registration failed. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <AuthFrame
+      eyebrow="CREATE YOUR PLAYER ID"
+      title="Your next chapter starts here."
+      copy="Set up your login, verify your email, and finish your player profile."
+    >
+      <form className="form-stack" onSubmit={submit}>
+        <label>
+          Email address
+          <input
+            type="email"
+            required
+            autoComplete="email"
+            value={form.email}
+            onChange={(e) =>
+              setForm({ ...form, email: e.target.value })
+            }
+          />
+        </label>
+
+        <label>
+          Password
+          <input
+            type="password"
+            required
+            minLength="10"
+            autoComplete="new-password"
+            value={form.password}
+            onChange={(e) =>
+              setForm({ ...form, password: e.target.value })
+            }
+          />
+          <small>
+            10+ characters, upper and lower case, and a number.
+          </small>
+        </label>
+
+        <label>
+          Confirm password
+          <input
+            type="password"
+            required
+            autoComplete="new-password"
+            value={form.confirmPassword}
+            onChange={(e) =>
+              setForm({ ...form, confirmPassword: e.target.value })
+            }
+          />
+        </label>
+
+        {error && <FormError>{error}</FormError>}
+
+        <button className="button form-submit" disabled={busy}>
+          {busy ? 'Sending code…' : 'Continue to email verification'}
+          <ArrowRight size={16} />
+        </button>
+
+        <div className="form-inline">
+          Already registered? <Link to="/login">Sign in</Link>
+        </div>
+      </form>
+    </AuthFrame>
+  );
 }
 
 function VerifyEmail(){const email=sessionStorage.getItem('oeg-verification-email')||'';const [code,setCode]=useState('');const [profile,setProfile]=useState(()=>sessionStorage.getItem('oeg-profile-verified')==='yes');const [form,setForm]=useState({fullName:'',username:'',age:'',phone:'',upiId:''});const [error,setError]=useState('');const [busy,setBusy]=useState(false);const [resend,setResend]=useState(0);const {setUser}=useAuth();const navigate=useNavigate();
