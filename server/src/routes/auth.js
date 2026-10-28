@@ -227,7 +227,20 @@ authRouter.post('/forgot-password', recoveryLimiter, async (req, res, next) => {
       const tokenHash = hashChallenge(token);
       await query(`insert into password_reset_challenges(user_id,token_hash,expires_at) values($1,$2,now()+interval '30 minutes')`, [found.rows[0].id, tokenHash]);
       try { await sendRecoveryLink(found.rows[0].email, token); }
-      catch { console.error(JSON.stringify({level:'warn',event:'password_recovery_delivery_failed'})); }
+      catch (error) {
+  const cause = error?.cause || error;
+
+  console.error(JSON.stringify({
+    level: 'warn',
+    event: 'password_recovery_delivery_failed',
+    code: error?.code || null,
+    causeCode: cause?.code || null,
+    causeMessage: cause?.message || null,
+    timeoutType: cause?.timeoutType || null,
+    responseCode: cause?.responseCode || null,
+    command: cause?.command || null,
+  }));
+}
     }
     res.json({ message: 'If an eligible account exists and email delivery is available, a reset link will be sent.' });
   } catch (error) { next(error); }

@@ -9,12 +9,22 @@ function transporter() {
     throw error;
   }
   return nodemailer.createTransport({
-    host: SMTP_HOST,
-    port: Number(SMTP_PORT),
-    secure: String(SMTP_SECURE).toLowerCase() === 'true',
-    auth: { user: SMTP_USER, pass: SMTP_APP_PASSWORD },
-    tls: { rejectUnauthorized: true },
-  });
+  host: SMTP_HOST,
+  port: Number(SMTP_PORT),
+  secure: String(SMTP_SECURE).toLowerCase() === 'true',
+  auth: {
+    user: SMTP_USER,
+    pass: SMTP_APP_PASSWORD,
+  },
+  tls: {
+    rejectUnauthorized: true,
+  },
+
+  // Fail promptly if the SMTP server cannot be reached.
+  connectionTimeout: 15000,
+  greetingTimeout: 10000,
+  socketTimeout: 30000,
+});
 }
 
 export async function sendCode(to, code, purpose = 'verify your email') {
