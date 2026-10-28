@@ -1,12 +1,8 @@
 
 let csrf = '';
 
-const API_BASE_URL = (
-  import.meta.env.VITE_API_URL || ''
-).replace(/\/+$/, '');
-
 function apiUrl(path) {
-  return `${API_BASE_URL}/api${path.startsWith('/') ? path : `/${path}`}`;
+  return `/api${path.startsWith('/') ? path : `/${path}`}`;
 }
 
 export async function api(path, options = {}) {
