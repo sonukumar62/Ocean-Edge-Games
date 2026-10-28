@@ -18,6 +18,15 @@ export const pool = hasPostgresUrl
           ? {
               rejectUnauthorized: true,
               ca,
+              console.log('[database SSL diagnostic]', {
+  nodeEnv: process.env.NODE_ENV,
+  certificateLoaded:
+    Boolean(ca?.includes('-----BEGIN CERTIFICATE-----')) &&
+    Boolean(ca?.includes('-----END CERTIFICATE-----')),
+  certificateLength: ca?.length ?? 0,
+  urlHasSslParameters:
+    /[?&](sslmode|sslrootcert|sslcert|sslkey)=/i.test(databaseUrl),
+});
             }
           : undefined,
       max: 12,
