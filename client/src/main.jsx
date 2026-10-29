@@ -106,11 +106,145 @@ function Home() {
 
 function HeroArt() { return <div className="hero-art" aria-label="Professional esports player competing in a live arena" role="img"><div className="art-arc art-arc-one"/><div className="art-arc art-arc-two"/><div className="art-orbit"/><div className="art-shard shard-one"/><div className="art-shard shard-two"/><div className="art-person"><span className="person-head"/><span className="person-body"/><span className="person-arm"/><span className="person-blade"/></div><div className="art-scanline"/><div className="art-label"><span>OEG // CIRCUIT 01</span><b>PLAYER<br/>UNKNOWN</b><small>READY TO DEPLOY</small></div><div className="art-stamp">EST.<br/><b>2026</b></div><div className="art-crosshair"><Crosshair size={17}/></div></div>; }
 
+
 function TournamentCard({ tournament: t, index = 0 }) {
   const displayedRegistrations = Number(t?.registration_count || 0);
-  const rewardConfig = t?.reward_config || {};
-  return <article className={`tournament-card card-tone-${index%3}`}><Link to={`/tournaments/${t.slug}`} className="t-card-image">{t.artwork_url&&<img className="t-card-thumbnail" src={t.artwork_url} alt={t.name+" tournament"}/>}<div className={`t-image-art ${t.artwork_url?'has-thumbnail':''}`}><span className="t-art-ring"/><span className="t-art-slash"/><span className="t-art-no">0{index+1}</span><Gamepad2 size={34}/></div><span className="game-tag">{t.game_name}</span><span className="card-corner">OEG / SERIES</span></Link><div className="t-card-body"><div className="t-card-title"><span className="format-label">{t.format_name} {Number(t.participant_count)>1?'team':'solo'}</span><StatusPill tone={t.status==='registration_open'?'live':t.status==='registration_full'?'warning':t.status==='registration_closed'?'muted':'success'}>{t.status==='registration_open'?'Registration open':t.status==='registration_not_open'?'Registration opens soon':t.status==='registration_full'?'Registration full':t.status==='registration_closed'?'Registration closed':t.status}</StatusPill><h3><Link to={`/tournaments/${t.slug}`}>{t.name}</Link></h3></div><div className="t-card-meta"><span><CalendarDays size={14}/>{dateTime(t.start_at,{timeStyle:undefined})}</span><span><Users size={14}/>{t.capacity ? `${displayedRegistrations} / ${t.capacity} spots` : `${displayedRegistrations} registered`}</span></div><div className="t-card-foot"><strong>{moneyOrFree(t.entry_fee_paise)}</strong><span className="t-card-rewards">Total rewards · {money(rewardConfig.cashPaise||0)} · {Number(rewardConfig.ogPoints||0).toLocaleString('en-IN')} OG · {Number(rewardConfig.xpPoints||0).toLocaleString('en-IN')} XP</span><Link to={`/tournaments/${t.slug}`} aria-label={`View ${t.name}`}><ArrowUpRight size={17}/></Link></div></div></article>;
+
+  const statusLabels = {
+    registration_open: 'Registration open',
+    registration_not_open: 'Opens soon',
+    registration_full: 'Registration full',
+    registration_closed: 'Registration closed',
+    started: 'Tournament started',
+    ongoing: 'Live tournament',
+    completed: 'Completed',
+  };
+
+  const statusTone =
+    t.status === 'registration_open'
+      ? 'open'
+      : t.status === 'registration_not_open'
+        ? 'soon'
+        : t.status === 'registration_full'
+          ? 'full'
+          : t.status === 'registration_closed'
+            ? 'closed'
+            : ['started', 'ongoing'].includes(t.status)
+              ? 'live'
+              : 'ended';
+
+  const isOpen = t.status === 'registration_open';
+  const tournamentUrl = `/tournaments/${t.slug}`;
+
+  return (
+    <article className={`tournament-card tournament-card-new card-tone-${index % 3}`}>
+      <Link
+        to={tournamentUrl}
+        className="t-card-image tournament-card-hero"
+        aria-label={`View ${t.name}`}
+      >
+        {t.artwork_url ? (
+          <img
+            className="t-card-thumbnail"
+            src={t.artwork_url}
+            alt={`${t.name} tournament artwork`}
+          />
+        ) : (
+          <div className="t-image-art tournament-card-art-fallback">
+            <span className="t-art-ring" />
+            <span className="t-art-slash" />
+            <Gamepad2 size={58} />
+          </div>
+        )}
+
+        <span className="tournament-card-shade" />
+
+        <span className="tournament-card-index">
+          {String(index + 1).padStart(2, '0')}
+          <span> / FEATURED BRACKET</span>
+        </span>
+
+        <span className={`tournament-card-status status-${statusTone}`}>
+          <span className="tournament-card-status-dot" />
+          {statusLabels[t.status] || String(t.status || 'Status unavailable').replaceAll('_', ' ')}
+        </span>
+
+        <span className="tournament-card-game">
+          <Gamepad2 size={14} />
+          {t.game_name}
+        </span>
+      </Link>
+
+      <div className="tournament-card-content">
+        <div className="tournament-card-heading">
+          <span className="tournament-card-kicker">
+            {t.format_name || 'Tournament'}
+          </span>
+
+          <h3 className="tournament-card-name">
+            <Link to={tournamentUrl}>{t.name}</Link>
+          </h3>
+        </div>
+
+        <div className="tournament-card-info">
+          <div className="tournament-card-info-item">
+            <span className="tournament-card-info-icon date-icon">
+              <CalendarDays size={19} />
+            </span>
+            <span className="tournament-card-info-copy">
+              <small>TOURNAMENT DATE</small>
+              <strong>{dateTime(t.start_at, { timeStyle: undefined })}</strong>
+            </span>
+          </div>
+
+          <div className="tournament-card-info-item">
+            <span className="tournament-card-info-icon mode-icon">
+              <Crosshair size={19} />
+            </span>
+            <span className="tournament-card-info-copy">
+              <small>GAME MODE</small>
+              <strong>
+                {Number(t.participant_count) > 1 ? 'Team' : 'Solo'}
+                {t.format_name ? ` · ${t.format_name}` : ''}
+              </strong>
+            </span>
+          </div>
+
+          <div className="tournament-card-info-item">
+            <span className="tournament-card-info-icon fee-icon">
+              <Zap size={19} />
+            </span>
+            <span className="tournament-card-info-copy">
+              <small>ENTRY FEE</small>
+              <strong>{moneyOrFree(t.entry_fee_paise)}</strong>
+            </span>
+          </div>
+        </div>
+
+        <div className="tournament-card-bottom">
+          <div className="tournament-card-registrations">
+            <span className="tournament-card-people-icon">
+              <Users size={19} />
+            </span>
+            <span>
+              <strong>
+                {displayedRegistrations.toLocaleString('en-IN')}
+                {t.capacity ? ` / ${Number(t.capacity).toLocaleString('en-IN')}` : ''}
+              </strong>
+              <small>REGISTERED PLAYERS</small>
+            </span>
+          </div>
+
+          <Link className="tournament-card-cta" to={tournamentUrl}>
+            {isOpen ? 'View & register' : 'View tournament'}
+            <ArrowRight size={17} />
+          </Link>
+        </div>
+      </div>
+    </article>
+  );
 }
+
 
 function Tournaments() {
   const navigate=useNavigate();const location=useLocation();const params=new URLSearchParams(location.search);
