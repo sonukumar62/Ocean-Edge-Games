@@ -6,6 +6,7 @@ import { api, dateTime, money, send } from './api.js';
 import { OGSymbol, XPSymbol } from './points-symbols.jsx';
 import { AdminPanel, Leaderboard, PlayerSearch, PublicPlayer, PublicProfileView, ShieldBadge, Support } from './extended-pages.jsx';
 import './styles.css';
+import ReactMarkdown from 'react-markdown';
 
 const AuthContext = createContext(null);
 const useAuth = () => useContext(AuthContext);
@@ -125,11 +126,40 @@ function Pagination({page,limit,total,onChange}){const pages=Math.ceil(total/lim
 function TournamentDetail(){
   const {slug}=useParams();
   const state=useData(()=>api(`/tournaments/${slug}`).then(v=>v.tournament),[slug]);
-  const {user,toast}=useAuth();const navigate=useNavigate();const [teams,setTeams]=useState([]);const [teamId,setTeamId]=useState('');const [busy,setBusy]=useState(false);const [manualCheckout,setManualCheckout]=useState(null);
+  
+const {user,toast}=useAuth();
+const navigate=useNavigate();
+const [teams,setTeams]=useState([]);
+const [teamId,setTeamId]=useState('');
+const [busy,setBusy]=useState(false);
+const [manualCheckout,setManualCheckout]=useState(null);
+const [activeDetailSection,setActiveDetailSection]=useState('prize-vault');
+
   useEffect(()=>{if(user?.role==='player')api('/teams').then(v=>setTeams(v.data)).catch(()=>{});},[user]);
   if(state.loading)return <div className="shell page-shell"><Loading/></div>;
   if(state.error)return <div className="shell page-shell"><ErrorState message={state.error}/></div>;
-  const t=state.data;const needsTeam=Number(t.participant_count)>1;
+  const t = state.data;
+const needsTeam = Number(t.participant_count) > 1;
+
+const fullDescription =
+  t.description || 'Tournament details will be published by the organizer.';
+
+const descriptionPreview = fullDescription
+  .replace(/```[\s\S]*?```/g, ' ')
+  .replace(/!\[.*?\]\(.*?\)/g, '')
+  .replace(/\[([^\]]+)\]\(.*?\)/g, '$1')
+  .replace(/^#{1,6}\s+/gm, '')
+  .replace(/(\*\*|__|~~|\*|_|`)/g, '')
+  .replace(/^\s*[-*+]\s+/gm, '')
+  .replace(/^\s*\d+\.\s+/gm, '')
+  .replace(/\s+/g, ' ')
+  .trim();
+
+const shortDescription =
+  descriptionPreview.length > 230
+    ? `${descriptionPreview.slice(0, 230).trimEnd()}...`
+    : descriptionPreview;
+    
   const register=async()=>{
     if(!user){navigate('/login',{state:{from:`/tournaments/${slug}`}});return;}
     setBusy(true);
@@ -145,10 +175,373 @@ function TournamentDetail(){
       }else toast('Registration #'+String(created.registration.registration_number).padStart(6,'0')+' confirmed. You’re in.');
     }catch(error){toast(error.message);}finally{setBusy(false);}
   };
-  return <>{manualCheckout&&<ManualCheckout checkout={manualCheckout} onClose={()=>setManualCheckout(null)} toast={toast}/>}<div className="page-shell shell"><Link to="/tournaments" className="back-link"><ArrowRight size={14}/> All tournaments</Link><div className="detail-hero"><div className="detail-art">{t.artwork_url&&<img className="detail-thumbnail" src={t.artwork_url} alt={t.name+" tournament"}/>}<div className="detail-art-shape"/><span className="detail-art-code">OEG // OPEN SERIES</span><span className="detail-art-title">{t.game_name}<b>— {t.format_name}</b></span></div><div className="detail-heading"><Eyebrow icon={Gamepad2}>{t.game_name} / {t.format_name}</Eyebrow><StatusPill tone={t.canRegister?'live':t.status==='registration_full'?'warning':'muted'}>{t.canRegister?'Registration open':t.status==='registration_full'?'Registration full':t.status==='registration_not_open'?'Registration opens soon':t.status==='registration_closed'?'Registration closed':t.status}</StatusPill><h1>{t.name}</h1><p>{t.description||'Tournament details and rules will be published by the organizer.'}</p><div className="detail-stats"><div><span>ENTRY</span><b>{moneyOrFree(t.entry_fee_paise)}</b></div><div><span>STARTS</span><b>{dateTime(t.start_at)}</b></div><div><span>FORMAT</span><b>{t.format_name} / {t.participant_count}</b></div><div><span>ENTRIES</span><b>{t.registration_count}{t.capacity?` / ${t.capacity}`:''}</b></div></div>{t.canRegister&&<div className="register-controls">{needsTeam&&<select value={teamId} onChange={e=>setTeamId(e.target.value)}><option value="">Choose your {t.format_name} team</option>{teams.filter(team=>team.format_id===t.format_id).map(team=><option key={team.id} value={team.id}>{team.name} · {team.roster.length}/{team.participant_count}</option>)}</select>}<button className="button" disabled={busy||(needsTeam&&!teamId)} onClick={register}>{busy?'Working…':t.entry_fee_paise>0?'Register & pay':'Register now'} <ArrowRight size={16}/></button></div>}
-        {Number(t.entry_fee_paise)>0&&<small className="refund-note">Entry-fee refunds are unavailable within 48 hours of tournament start. See <Link to="/terms">Terms & Conditions</Link>.</small>}</div></div>
-    <div className="detail-columns"><section><Eyebrow>TOURNAMENT RULES</Eyebrow><h2>Know the field.</h2><div className="rules-copy">{t.rules? t.rules.split('\n').map((line,i)=><p key={i}>{line}</p>):<p>Rules and schedule have not been published yet. Check back for organizer updates.</p>}</div><div className="detail-prizes"><Eyebrow>PRIZE POOL</Eyebrow>{t.reward_config&&<div className="tournament-prize-pool">{Number(t.reward_config.cashPaise)>0&&<span><strong>{money(t.reward_config.cashPaise)}</strong><small>CASH</small></span>}{Number(t.reward_config.ogPoints)>0&&<span><strong>{Number(t.reward_config.ogPoints).toLocaleString('en-IN')}</strong><small>OG POINTS</small></span>}{Number(t.reward_config.xpPoints)>0&&<span><strong>{Number(t.reward_config.xpPoints).toLocaleString('en-IN')}</strong><small>XP POINTS</small></span>}</div>}{Array.isArray(t.reward_config?.rankRewards)&&t.reward_config.rankRewards.length>0&&<div className="tournament-rank-prize-list">{t.reward_config.rankRewards.slice().sort((a,b)=>Number(a.place)-Number(b.place)).map(reward=><div className="tournament-rank-prize-row" key={reward.place}><strong>{["1st","2nd","3rd"][Number(reward.place)-1]||`${reward.place}th`} place</strong><span>{Number(reward.cashPaise)>0?money(reward.cashPaise):null}</span><span>{Number(reward.ogPoints)>0?`${Number(reward.ogPoints).toLocaleString("en-IN")} OG`:null}</span><span>{Number(reward.xpPoints)>0?`${Number(reward.xpPoints).toLocaleString("en-IN")} XP`:null}</span></div>)}</div>}{Array.isArray(t.prizes)&&t.prizes.length?t.prizes.map((p,i)=><div className="prize-row" key={i}><span>0{i+1}</span><strong>{p.place}</strong><p>{p.description}</p></div>):<p>Prize details will be announced by the organizer.</p>}</div></section><aside><div className="side-panel"><Eyebrow icon={CalendarDays}>KEY DATES</Eyebrow><div className="timeline-row"><span className="timeline-dot"/><div><small>REGISTRATION OPENS</small><strong>{dateTime(t.registration_opens_at)}</strong></div></div><div className="timeline-row"><span className="timeline-dot red"/><div><small>REGISTRATION CLOSES</small><strong>{dateTime(t.registration_deadline)}</strong></div></div><div className="timeline-row"><span className="timeline-dot red"/><div><small>TOURNAMENT STARTS</small><strong>{dateTime(t.start_at)}</strong></div></div><div className="capacity-line"><span>REGISTRATION</span><b>{t.capacity?`${Math.min(100,Math.round(t.registration_count/t.capacity*100))}%`:`${t.registration_count} entries`}</b></div>{t.capacity&&<div className="capacity-track"><span style={{width:`${Math.min(100,t.registration_count/t.capacity*100)}%`}}/></div>}</div><div className="side-panel"><Eyebrow icon={Activity}>SCHEDULE</Eyebrow>{t.matches?.length?t.matches.map(m=><div key={m.id} className="match-schedule"><span className="status-dot"/><div><strong>{m.title}</strong><small>{dateTime(m.scheduledAt)}</small></div><StatusPill tone={m.status==='completed'?'success':'muted'}>{m.status}</StatusPill></div>):<p className="muted-copy">Match schedule will be published when ready.</p>}</div></aside></div>
-  </div></>;
+  
+return (
+  <>
+    {manualCheckout && (
+      <ManualCheckout
+        checkout={manualCheckout}
+        onClose={() => setManualCheckout(null)}
+        toast={toast}
+      />
+    )}
+
+    <div className="page-shell shell tournament-detail-page">
+      <Link to="/tournaments" className="back-link">
+        <ArrowRight size={14} /> All tournaments
+      </Link>
+
+      {/* HERO */}
+      <section className="detail-hero">
+        <div className="detail-art">
+          {t.artwork_url ? (
+            <img
+              className="detail-thumbnail"
+              src={t.artwork_url}
+              alt={`${t.name} tournament artwork`}
+            />
+          ) : (
+            <div className="detail-art-placeholder">
+              <Gamepad2 size={44} />
+              <span>{t.game_name}</span>
+              <strong>{t.format_name}</strong>
+            </div>
+          )}
+
+          <span className="detail-art-code">OEG // OPEN SERIES</span>
+          <span className="detail-art-title">
+            {t.game_name}
+            <b>— {t.format_name}</b>
+          </span>
+        </div>
+
+        <div className="detail-heading">
+          <Eyebrow icon={Gamepad2}>
+            {t.game_name} / {t.format_name}
+          </Eyebrow>
+
+          <StatusPill
+            tone={
+              t.canRegister
+                ? 'live'
+                : t.status === 'registration_full'
+                  ? 'warning'
+                  : 'muted'
+            }
+          >
+            {t.canRegister
+              ? 'Registration open'
+              : t.status === 'registration_full'
+                ? 'Registration full'
+                : t.status === 'registration_not_open'
+                  ? 'Registration opens soon'
+                  : t.status === 'registration_closed'
+                    ? 'Registration closed'
+                    : t.status}
+          </StatusPill>
+
+          <h1>{t.name}</h1>
+
+          <p className="detail-description-preview">
+            {shortDescription}
+          </p>
+
+
+          <div className="detail-stats">
+            <div>
+              <span>ENTRY</span>
+              <b>{moneyOrFree(t.entry_fee_paise)}</b>
+            </div>
+            <div>
+              <span>STARTS</span>
+              <b>{dateTime(t.start_at)}</b>
+            </div>
+            <div>
+              <span>FORMAT</span>
+              <b>{t.format_name} / {t.participant_count}</b>
+            </div>
+          </div>
+
+          {t.canRegister && (
+            <div className="register-controls">
+              {needsTeam && (
+                <select
+                  value={teamId}
+                  onChange={e => setTeamId(e.target.value)}
+                >
+                  <option value="">Choose your {t.format_name} team</option>
+                  {teams
+                    .filter(team => team.format_id === t.format_id)
+                    .map(team => (
+                      <option key={team.id} value={team.id}>
+                        {team.name} · {team.roster.length}/{team.participant_count}
+                      </option>
+                    ))}
+                </select>
+              )}
+
+              <button
+                className="button"
+                disabled={busy || (needsTeam && !teamId)}
+                onClick={register}
+              >
+                {busy
+                  ? 'Working…'
+                  : Number(t.entry_fee_paise) > 0
+                    ? 'Register & pay'
+                    : 'Register now'}
+                <ArrowRight size={16} />
+              </button>
+            </div>
+          )}
+
+          {Number(t.entry_fee_paise) > 0 && (
+            <small className="refund-note">
+              Entry-fee refunds are unavailable within 48 hours of tournament
+              start. See <Link to="/terms">Terms & Conditions</Link>.
+            </small>
+          )}
+        </div>
+      </section>
+
+      {/* INFORMATION NAVIGATION */}
+      
+<nav className="detail-section-nav" aria-label="Tournament information">
+  {[
+    { id: 'prize-vault', label: 'Prize vault', Icon: Trophy },
+    { id: 'event-briefing', label: 'Briefing', Icon: Globe2 },
+    { id: 'event-rules', label: 'Rules', Icon: ShieldCheck },
+  ].map(({ id, label, Icon }) => (
+    <button
+      key={id}
+      type="button"
+      className={`detail-tab ${activeDetailSection === id ? 'active' : ''}`}
+      aria-expanded={activeDetailSection === id}
+      aria-controls={id}
+      onClick={() => setActiveDetailSection(id)}
+    >
+      <Icon size={16} />
+      <span>{label}</span>
+      <ChevronDown
+        size={15}
+        className="detail-tab-chevron"
+      />
+    </button>
+  ))}
+</nav>
+
+
+      {/* MAIN CONTENT + SIDEBAR */}
+      <div className="detail-columns detail-columns-redesigned">
+        <div className="detail-main-content">
+
+          {/* PRIZE VAULT */}
+          {activeDetailSection === 'prize-vault' && (
+  <section className="detail-content-panel prize-vault" id="prize-vault">
+            <div className="detail-panel-heading">
+              <div>
+                <Eyebrow icon={Trophy}>THE REWARD BOARD</Eyebrow>
+                <h2>Prize vault<span>.</span></h2>
+              </div>
+              <span className="detail-section-index">01</span>
+            </div>
+
+            {t.reward_config &&
+            (
+              Number(t.reward_config.cashPaise) > 0 ||
+              Number(t.reward_config.ogPoints) > 0 ||
+              Number(t.reward_config.xpPoints) > 0
+            ) ? (
+              <div className="prize-highlight-grid">
+                {Number(t.reward_config.cashPaise) > 0 && (
+                  <div className="prize-highlight prize-highlight-cash">
+                    <span>CASH REWARDS</span>
+                    <strong>{money(t.reward_config.cashPaise)}</strong>
+                    <small>Cash prize pool</small>
+                  </div>
+                )}
+
+                {Number(t.reward_config.ogPoints) > 0 && (
+                  <div className="prize-highlight">
+                    <span>OG POINTS</span>
+                    <strong>
+                      {Number(t.reward_config.ogPoints).toLocaleString('en-IN')}
+                    </strong>
+                    <small>Competition points</small>
+                  </div>
+                )}
+
+                {Number(t.reward_config.xpPoints) > 0 && (
+                  <div className="prize-highlight">
+                    <span>XP REWARDS</span>
+                    <strong>
+                      {Number(t.reward_config.xpPoints).toLocaleString('en-IN')}
+                    </strong>
+                    <small>Experience points</small>
+                  </div>
+                )}
+              </div>
+            ) : null}
+
+            {Array.isArray(t.reward_config?.rankRewards) &&
+              t.reward_config.rankRewards.length > 0 && (
+                <div className="detail-rank-list">
+                  {t.reward_config.rankRewards
+                    .slice()
+                    .sort((a, b) => Number(a.place) - Number(b.place))
+                    .map(reward => (
+                      <div className="detail-rank-row" key={reward.place}>
+                        <span className="detail-rank-medal">
+                          {Number(reward.place) === 1
+                            ? '01'
+                            : String(reward.place).padStart(2, '0')}
+                        </span>
+                        <strong>
+                          {['1st', '2nd', '3rd'][Number(reward.place) - 1] ||
+                            `${reward.place}th`} place
+                        </strong>
+                        <div>
+                          {Number(reward.cashPaise) > 0 && (
+                            <span>{money(reward.cashPaise)}</span>
+                          )}
+                          {Number(reward.ogPoints) > 0 && (
+                            <span>
+                              {Number(reward.ogPoints).toLocaleString('en-IN')} OG
+                            </span>
+                          )}
+                          {Number(reward.xpPoints) > 0 && (
+                            <span>
+                              {Number(reward.xpPoints).toLocaleString('en-IN')} XP
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
+
+            {Array.isArray(t.prizes) && t.prizes.length > 0 ? (
+              <div className="detail-custom-prizes">
+                {t.prizes.map((prize, index) => (
+                  <article className="detail-custom-prize" key={index}>
+                    <span>{String(index + 1).padStart(2, '0')}</span>
+                    <div>
+                      <strong>{prize.place}</strong>
+                      <p>{prize.description}</p>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : !t.reward_config &&
+              (!Array.isArray(t.prizes) || !t.prizes.length) ? (
+              <p className="muted-copy">
+                Prize details will be announced by the organizer.
+              </p>
+            ) : null}
+          </section>
+          )}
+
+          {/* FULL DESCRIPTION */}
+          {activeDetailSection === 'event-briefing' && (
+  <section className="detail-content-panel detail-full-description" id="event-briefing">
+            <div className="detail-panel-heading">
+              <div>
+                <Eyebrow icon={Globe2}>THE EVENT BRIEFING</Eyebrow>
+                <h2>Know your mission<span>.</span></h2>
+              </div>
+              <span className="detail-section-index">02</span>
+            </div>
+
+            <div className="detail-markdown">
+              <ReactMarkdown>{fullDescription}</ReactMarkdown>
+            </div>
+          </section>
+          )}
+
+          {/* RULES */}
+          {activeDetailSection === 'event-rules' && (
+  <section className="detail-content-panel detail-rules-panel" id="event-rules">
+            <div className="detail-panel-heading">
+              <div>
+                <Eyebrow icon={ShieldCheck}>FAIR PLAY PROTOCOL</Eyebrow>
+                <h2>Rules of engagement<span>.</span></h2>
+              </div>
+              <span className="detail-section-index">03</span>
+            </div>
+
+            <div className="detail-markdown">
+              {t.rules?.trim() ? (
+                <ReactMarkdown>{t.rules}</ReactMarkdown>
+              ) : (
+                <p>
+                  Rules have not been published yet. Check back for official
+                  instructions from the organizer before registering.
+                </p>
+              )}
+            </div>
+          </section>
+          )}
+        </div>
+
+        {/* SIDEBAR */}
+        <aside className="detail-sidebar">
+          <div className="side-panel detail-sticky-panel">
+            <Eyebrow icon={CalendarDays}>KEY DATES</Eyebrow>
+
+            <div className="timeline-row">
+              <span className="timeline-dot" />
+              <div>
+                <small>REGISTRATION OPENS</small>
+                <strong>{dateTime(t.registration_opens_at)}</strong>
+              </div>
+            </div>
+
+            <div className="timeline-row">
+              <span className="timeline-dot red" />
+              <div>
+                <small>REGISTRATION CLOSES</small>
+                <strong>{dateTime(t.registration_deadline)}</strong>
+              </div>
+            </div>
+
+            <div className="timeline-row">
+              <span className="timeline-dot red" />
+              <div>
+                <small>TOURNAMENT STARTS</small>
+                <strong>{dateTime(t.start_at)}</strong>
+              </div>
+            </div>
+
+          </div>
+
+          <div className="side-panel">
+            <Eyebrow icon={Activity}>MATCH SCHEDULE</Eyebrow>
+
+            {t.matches?.length ? (
+              t.matches.map(match => (
+                <div key={match.id} className="match-schedule">
+                  <span className="status-dot" />
+                  <div>
+                    <strong>{match.title}</strong>
+                    <small>{dateTime(match.scheduledAt)}</small>
+                  </div>
+                  <StatusPill tone={match.status === 'completed' ? 'success' : 'muted'}>
+                    {match.status}
+                  </StatusPill>
+                </div>
+              ))
+            ) : (
+              <p className="muted-copy">
+                Match schedule will be published when ready.
+              </p>
+            )}
+          </div>
+        </aside>
+      </div>
+    </div>
+  </>
+);
+
 }
 
 function ManualCheckout({checkout,onClose,toast}){const [proof,setProof]=useState(null);const [busy,setBusy]=useState(false);const [error,setError]=useState('');const submit=async e=>{e.preventDefault();if(!proof)return;setBusy(true);setError('');try{const body=new FormData();body.append('registrationId',checkout.registrationId);body.append('proof',proof);await api('/payments/manual/submit',{method:'POST',body});toast(`REG-${String(checkout.registrationNumber).padStart(6,'0')} submitted for payment verification.`);onClose();}catch(err){setError(err.message);}finally{setBusy(false);}};return <div className="modal-backdrop" role="presentation" onMouseDown={e=>e.target===e.currentTarget&&onClose()}><section className="payment-checkout-modal" role="dialog" aria-modal="true" aria-labelledby="manual-payment-title"><button type="button" className="modal-close" onClick={onClose} aria-label="Close">×</button><span className="eyebrow">UPI / MANUAL PAYMENT</span><h2 id="manual-payment-title">Complete your entry.</h2><p>{checkout.tournamentName} · REG-{String(checkout.registrationNumber).padStart(6,'0')}</p><strong className="payment-amount">{money(checkout.amountPaise)}</strong>{checkout.qrUrl?<img className="payment-qr-preview" src={checkout.qrUrl} alt="Tournament payment QR code"/>:<div className="form-error">Payment QR is unavailable. Contact tournament support.</div>}<p>Scan the QR or pay <strong>{checkout.amountPaise>0?money(checkout.amountPaise):''}</strong> to <strong>{checkout.upiId}</strong>. Include REG-{String(checkout.registrationNumber).padStart(6,'0')} in the payment note, finish the transfer in your UPI app, then upload its success screen. Your entry remains pending until an administrator confirms receipt.</p><form className="form-stack" onSubmit={submit}><label>Payment screenshot<input required type="file" accept="image/png,image/jpeg,image/webp" onChange={e=>setProof(e.target.files?.[0]||null)}/><small>PNG, JPEG, or WebP · up to 4 MB</small></label>{proof&&<img className="payment-proof-preview" src={URL.createObjectURL(proof)} alt="Selected payment proof preview"/>}{error&&<div className="form-error">{error}</div>}<button className="button" disabled={busy||!proof}>{busy?'Submitting…':'Submit for verification'}</button></form></section></div>}
