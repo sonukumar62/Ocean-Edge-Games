@@ -217,7 +217,7 @@ create table if not exists match_results (
   id uuid primary key default gen_random_uuid(),
   match_id uuid not null references matches(id) on delete restrict,
   registration_id uuid not null references tournament_registrations(id) on delete restrict,
-  placement integer not null check(placement > 0),
+  placement integer not null check(placement >= 0),
   finalized_by uuid references users(id) on delete set null,
   finalized_at timestamptz,
   correction_of uuid references match_results(id) on delete restrict,
@@ -228,7 +228,7 @@ create unique index if not exists match_results_original_idx on match_results(ma
 create table if not exists reward_rules (
   id uuid primary key default gen_random_uuid(),
   tournament_id uuid not null references tournaments(id) on delete cascade,
-  placement integer not null check(placement > 0),
+  placement integer not null check(placement >= 0),
   og_points integer not null default 0 check(og_points >= 0),
   xp_points integer not null default 0 check(xp_points >= 0),
   cash_paise integer not null default 0 check(cash_paise >= 0),

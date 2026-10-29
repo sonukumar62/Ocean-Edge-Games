@@ -1327,4 +1327,4 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
       rgb(40 201 232 / 5%),
       transparent 50%
     ) !important;
-}
+}.rank-reward-row.rank-reward-contender{border-color:rgba(64,199,232,.3);background:linear-gradient(105deg,rgba(28,124,154,.13),rgba(7,12,19,.48) 55%)}

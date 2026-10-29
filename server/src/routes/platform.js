@@ -832,7 +832,7 @@ platformRouter.patch('/admin/announcements/:id',requireAdmin,async(req,res)=>{co
 platformRouter.post('/admin/tournaments', requireAdmin, uploadImage.single('thumbnail'), async (req, res) => {
   let rankRewards=req.body.rankRewards;
   if(typeof rankRewards==='string'){try{rankRewards=JSON.parse(rankRewards);}catch{return res.status(400).json({error:'Check prize pool ranks.'});}}
-  const rewardSchema=z.array(z.object({place:z.number().int().min(1).max(20),cashPaise:z.number().int().nonnegative().max(100000000),ogPoints:z.number().int().nonnegative().max(100000000),xpPoints:z.number().int().nonnegative().max(100000000)})).max(20).refine(rows=>new Set(rows.map(row=>row.place)).size===rows.length,'Prize places must be unique.');
+  const rewardSchema=z.array(z.object({place:z.number().int().min(0).max(20),cashPaise:z.number().int().nonnegative().max(100000000),ogPoints:z.number().int().nonnegative().max(100000000),xpPoints:z.number().int().nonnegative().max(100000000)})).max(21).refine(rows=>new Set(rows.map(row=>row.place)).size===rows.length,'Prize places must be unique.').refine(rows=>rows.some(row=>row.place===0),'Set a shared Every contender reward.');
   const rewardCheck=rewardSchema.safeParse(rankRewards??[]);if(!rewardCheck.success)return res.status(400).json({error:'Prize ranks must be unique and use valid non-negative reward values.'});
   const checked = z.object({ gameId:z.string().uuid(),formatId:z.string().uuid(),name:z.string().trim().min(3).max(100),slug:z.string().trim().min(3).max(120).regex(/^[a-z0-9-]+$/),description:z.string().max(5000).optional(),rules:z.string().max(12000).optional(),startAt:z.string().datetime(),registrationOpensAt:z.string().datetime().optional(),registrationDeadline:z.string().datetime(),visibilityDeadline:z.string().datetime().optional(),visibilityMode:z.enum(['auto','show','hide']).default('auto'),timezone:z.string().min(3).max(60).optional(),capacity:z.preprocess(value=>value===''?null:value,z.coerce.number().int().positive().nullable().optional()),entryFeePaise:z.coerce.number().int().nonnegative().max(100000000),cashPrizePaise:z.coerce.number().int().nonnegative().max(100000000).default(0),ogPointsPrize:z.coerce.number().int().nonnegative().max(100000000).default(0),xpPointsPrize:z.coerce.number().int().nonnegative().max(100000000).default(0),artworkUrl:z.string().url().optional().or(z.literal('')),prizes:z.array(z.object({place:z.string().max(40),description:z.string().max(300)})).max(10).optional(),status:z.enum(['draft','published']).default('published') }).safeParse(req.body);
   if (!checked.success) return res.status(400).json({error:'Check the game, format, tournament name, registration window, tournament deadline, and entry fee.'});
@@ -869,7 +869,7 @@ platformRouter.patch('/admin/tournaments/:id/complete',requireAdmin,async(req,re
   if(!result)return res.status(404).json({error:'Tournament not found or it is already closed.'});res.json({tournament:result});
 });
 platformRouter.put('/admin/tournaments/:id', requireAdmin, async (req, res) => {
-  const rewardSchema=z.array(z.object({place:z.number().int().min(1).max(20),cashPaise:z.number().int().nonnegative().max(100000000),ogPoints:z.number().int().nonnegative().max(100000000),xpPoints:z.number().int().nonnegative().max(100000000)})).max(20).refine(rows=>new Set(rows.map(row=>row.place)).size===rows.length);
+  const rewardSchema=z.array(z.object({place:z.number().int().min(0).max(20),cashPaise:z.number().int().nonnegative().max(100000000),ogPoints:z.number().int().nonnegative().max(100000000),xpPoints:z.number().int().nonnegative().max(100000000)})).max(21).refine(rows=>new Set(rows.map(row=>row.place)).size===rows.length).refine(rows=>rows.some(row=>row.place===0),'Set a shared Every contender reward.');
   const data = parse(z.object({ name:z.string().trim().min(3).max(100),description:z.string().max(5000),rules:z.string().max(12000),startAt:z.string().datetime(),registrationDeadline:z.string().datetime(),capacity:z.coerce.number().int().positive().nullable(),entryFeePaise:z.coerce.number().int().nonnegative().max(100000000),cashPrizePaise:z.coerce.number().int().nonnegative().max(100000000).default(0),ogPointsPrize:z.coerce.number().int().nonnegative().max(100000000).default(0),xpPointsPrize:z.coerce.number().int().nonnegative().max(100000000).default(0),rankRewards:rewardSchema.optional(),status:z.enum(['draft','published','registration_closed','ongoing','completed','cancelled','archived']) }),req.body);
   if(!data||new Date(data.registrationDeadline)>new Date(data.startAt))return res.status(400).json({error:'Check tournament settings and dates.'});
   const result=await withTransaction(async(client)=>{
@@ -877,7 +877,7 @@ platformRouter.put('/admin/tournaments/:id', requireAdmin, async (req, res) => {
     const rewardConfig={cashPaise:rankRewards.length?rankRewards.reduce((sum,row)=>sum+row.cashPaise,0):data.cashPrizePaise,ogPoints:rankRewards.length?rankRewards.reduce((sum,row)=>sum+row.ogPoints,0):data.ogPointsPrize,xpPoints:rankRewards.length?rankRewards.reduce((sum,row)=>sum+row.xpPoints,0):data.xpPointsPrize,rankRewards};
     const row=await client.query(`update tournaments set name=$2,description=$3,rules=$4,start_at=$5,registration_deadline=$6,capacity=$7,entry_fee_paise=$8,reward_config=$9::jsonb,status=$10,published_at=case when $10='published' then coalesce(published_at,now()) else published_at end,updated_at=now() where id=$1 returning id,name,status,reward_config`,[req.params.id,data.name,data.description,data.rules,data.startAt,data.registrationDeadline,data.capacity,data.entryFeePaise,JSON.stringify(rewardConfig),data.status]);
     if(!row.rowCount)return null;
-    if(data.rankRewards)for(const reward of rankRewards)await client.query('insert into reward_rules(tournament_id,placement,og_points,xp_points,cash_paise) values($1,$2,$3,$4,$5) on conflict(tournament_id,placement) do update set og_points=excluded.og_points,xp_points=excluded.xp_points,cash_paise=excluded.cash_paise',[req.params.id,reward.place,reward.ogPoints,reward.xpPoints,reward.cashPaise]);
+    if(data.rankRewards){for(const reward of rankRewards)await client.query('insert into reward_rules(tournament_id,placement,og_points,xp_points,cash_paise) values($1,$2,$3,$4,$5) on conflict(tournament_id,placement) do update set og_points=excluded.og_points,xp_points=excluded.xp_points,cash_paise=excluded.cash_paise',[req.params.id,reward.place,reward.ogPoints,reward.xpPoints,reward.cashPaise]);await client.query('delete from reward_rules where tournament_id=$1 and not (placement=any($2::int[]))',[req.params.id,rankRewards.map(reward=>reward.place)]);}
     await recordAudit(client,userId(req),'tournament_updated','tournament',req.params.id,{status:data.status,rewardConfig});
     return row.rows[0];
   });
@@ -966,7 +966,7 @@ platformRouter.post('/admin/registrations/:id/participants',requireAdmin,async(r
 });
 
 platformRouter.post('/admin/matches', requireAdmin, async (req, res) => {
-  const data=parse(z.object({tournamentId:z.string().uuid(),title:z.string().trim().min(2).max(100),scheduledAt:z.string().datetime(),registrationIds:z.array(z.string().uuid()).min(1).max(64),roomId:z.string().max(100).optional(),roomPassword:z.string().max(100).optional(),roomReleasesAt:z.string().datetime().optional(),rewardRules:z.array(z.object({placement:z.number().int().positive(),ogPoints:z.number().int().nonnegative(),xpPoints:z.number().int().nonnegative(),cashPaise:z.number().int().nonnegative()})).optional()}),req.body);
+  const data=parse(z.object({tournamentId:z.string().uuid(),title:z.string().trim().min(2).max(100),scheduledAt:z.string().datetime(),registrationIds:z.array(z.string().uuid()).min(1).max(64),roomId:z.string().max(100).optional(),roomPassword:z.string().max(100).optional(),roomReleasesAt:z.string().datetime().optional(),rewardRules:z.array(z.object({placement:z.number().int().min(0),ogPoints:z.number().int().nonnegative(),xpPoints:z.number().int().nonnegative(),cashPaise:z.number().int().nonnegative()})).optional()}),req.body);
   if(!data)return res.status(400).json({error:'Check the match details.'});
   const match=await withTransaction(async(client)=>{
     const tournament=await client.query("select id from tournaments where id=$1 and status not in ('cancelled','archived')",[data.tournamentId]);
@@ -985,7 +985,7 @@ platformRouter.post('/admin/matches', requireAdmin, async (req, res) => {
 });
 
 platformRouter.post('/admin/matches/:id/finalize', requireAdmin, async (req, res) => {
-  const data=parse(z.object({placements:z.array(z.object({registrationId:z.string().uuid(),placement:z.number().int().positive()})).min(1).max(64),rewardRules:z.array(z.object({placement:z.number().int().positive(),ogPoints:z.number().int().nonnegative(),xpPoints:z.number().int().nonnegative(),cashPaise:z.number().int().nonnegative().max(100000000).optional().default(0)})).max(64).optional()}),req.body);
+  const data=parse(z.object({placements:z.array(z.object({registrationId:z.string().uuid(),placement:z.number().int().min(0)})).min(1).max(64),rewardRules:z.array(z.object({placement:z.number().int().min(0),ogPoints:z.number().int().nonnegative(),xpPoints:z.number().int().nonnegative(),cashPaise:z.number().int().nonnegative().max(100000000).optional().default(0)})).max(64).optional()}),req.body);
   if(!data)return res.status(400).json({error:'Provide valid result placements.'});
   const finalized=await withTransaction(async(client)=>{
     const match=await client.query("select m.id,m.tournament_id,m.status from matches m where m.id=$1 for update",[req.params.id]);
@@ -1000,7 +1000,7 @@ platformRouter.post('/admin/matches/:id/finalize', requireAdmin, async (req, res
     const created=[];
     for(const entry of data.placements){
       const result=await client.query('insert into match_results(match_id,registration_id,placement,finalized_by,finalized_at) values($1,$2,$3,$4,now()) returning id',[req.params.id,entry.registrationId,entry.placement,userId(req)]);
-      const rule=await client.query('select og_points,xp_points,cash_paise from reward_rules where tournament_id=$1 and placement=$2',[match.rows[0].tournament_id,entry.placement]);
+      const rule=await client.query('select og_points,xp_points,cash_paise from reward_rules where tournament_id=$1 and placement in ($2,0) order by (placement=$2) desc limit 1',[match.rows[0].tournament_id,entry.placement]);
       const reward=rule.rows[0]||{og_points:0,xp_points:0,cash_paise:0};
       const registration=await client.query('select player_id,team_id from tournament_registrations where id=$1',[entry.registrationId]);
       const recipient=registration.rows[0];
@@ -1027,7 +1027,7 @@ platformRouter.post('/admin/matches/:id/finalize', requireAdmin, async (req, res
 });
 
 platformRouter.post('/admin/matches/:id/corrections',requireAdmin,async(req,res)=>{
-  const data=parse(z.object({reason:z.string().trim().min(8).max(1000),placements:z.array(z.object({registrationId:z.string().uuid(),placement:z.number().int().positive()})).min(1).max(64)}),req.body);
+  const data=parse(z.object({reason:z.string().trim().min(8).max(1000),placements:z.array(z.object({registrationId:z.string().uuid(),placement:z.number().int().min(0)})).min(1).max(64)}),req.body);
   if(!data)return res.status(400).json({error:'Provide an audit reason and valid result placements.'});
   const corrected=await withTransaction(async(client)=>{
     const match=await client.query("select id,tournament_id,status from matches where id=$1 for update",[req.params.id]);
@@ -1072,7 +1072,7 @@ platformRouter.post('/admin/matches/:id/corrections',requireAdmin,async(req,res)
         }
       }
 
-      const rule=await client.query('select og_points,xp_points,cash_paise from reward_rules where tournament_id=$1 and placement=$2',[match.rows[0].tournament_id,entry.placement]);
+      const rule=await client.query('select og_points,xp_points,cash_paise from reward_rules where tournament_id=$1 and placement in ($2,0) order by (placement=$2) desc limit 1',[match.rows[0].tournament_id,entry.placement]);
       const reward=rule.rows[0]||{og_points:0,xp_points:0,cash_paise:0};
       const registration=await client.query('select player_id,team_id from tournament_registrations where id=$1',[entry.registrationId]);
       const recipient=registration.rows[0];
