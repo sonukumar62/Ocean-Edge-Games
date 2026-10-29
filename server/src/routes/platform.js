@@ -351,6 +351,7 @@ platformRouter.post('/teams', requirePlayer, async (req, res) => {
   const team = await withTransaction(async (client) => {
     const format = await client.query('select f.id,f.game_id,f.name,f.participant_count from game_formats f join games g on g.id=f.game_id where f.id=$1 and f.game_id=$2 and f.active=true and g.active=true', [data.formatId, data.gameId]);
     if (!format.rowCount) return { error: 'That format is not available for the selected game.' };
+    if(Number(format.rows[0].participant_count)===1)return {error:'Solo formats do not need a team. Add your game username or UID to your profile and join solo tournaments directly.'};
     const gameAccount=await client.query('select 1 from player_game_accounts where user_id=$1 and game_id=$2',[userId(req),data.gameId]);
     if(!gameAccount.rowCount)return {error:'Add your username or UID for this game in Edit Profile before creating a team.'};
     const existingName = await client.query('select 1 from teams where game_id=$1 and lower(name)=lower($2) limit 1', [data.gameId, data.name]);
