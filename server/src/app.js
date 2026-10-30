@@ -96,8 +96,8 @@ app.use((error, req, res, next) => {
   if (error.code === '23505' && error.constraint === 'teams_name_game_idx') return res.status(409).json({ error: 'Team name already exists for this game.' });
   if (error.code === '23505') return res.status(409).json({ error: 'That record already exists.' });
   if (error.code === '42P01' || error.code === '42703') {
-    console.error(`[api] ${req.method} ${req.path} failed (${error.code}): database migration is missing or incomplete.`);
-    return res.status(503).json({ error: 'The database is connected, but its application schema is missing or incomplete. Apply database/migrations/001_initial.sql and restart the server.', code: 'DATABASE_SCHEMA_NOT_READY' });
+    console.error(`[api] ${req.method} ${req.path} failed (${error.code}): a required database table or column is missing.`);
+    return res.status(503).json({ error: 'The database is connected, but its application schema is incomplete. Apply the missing database migrations in numeric order and restart the server.', code: 'DATABASE_SCHEMA_NOT_READY' });
   }
   if (error.status && error.status < 500) return res.status(error.status).json({ error: error.message });
   const diagnostic = safeErrorSummary(error);

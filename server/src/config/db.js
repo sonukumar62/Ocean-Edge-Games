@@ -12,6 +12,7 @@ const registrationTables = [
   'sessions',
   'admin_notifications',
 ];
+const requiredColumns = ['tournaments.priority_level'];
 
 // Load the certificate from the server environment.
 
@@ -160,11 +161,30 @@ export async function checkDatabaseConnection() {
       (table) => !present.has(table),
     );
 
+    const columnResult = await pool.query(
+      `SELECT table_name, column_name
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+       AND (table_name, column_name) IN (
+         SELECT split_part(required_column, '.', 1), split_part(required_column, '.', 2)
+         FROM unnest($1::text[]) AS required_column
+       )`,
+      [requiredColumns],
+    );
+    const presentColumns = new Set(
+      columnResult.rows.map(({ table_name, column_name }) => `${table_name}.${column_name}`),
+    );
+    const missingColumns = requiredColumns.filter((column) => !presentColumns.has(column));
+    const missingDetails = [
+      ...(missing.length ? [`tables: ${missing.join(', ')}`] : []),
+      ...(missingColumns.length ? [`columns: ${missingColumns.join(', ')}`] : []),
+    ];
+
     return {
       connected: true,
-      schemaReady: missing.length === 0,
-      reason: missing.length
-        ? `Missing registration tables: ${missing.join(', ')}. Check your database migrations.`
+      schemaReady: missingDetails.length === 0,
+      reason: missingDetails.length
+        ? `Missing application schema ${missingDetails.join('; ')}. Apply the corresponding database migrations.`
         : '',
     };
   } catch (error) {
