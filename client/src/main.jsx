@@ -1,6 +1,19 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation, useNavigate, useParams, Link } from 'react-router-dom';
+
+import {
+  BrowserRouter,
+  Navigate,
+  Outlet,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+  useParams,
+  Link,
+  NavLink
+} from 'react-router-dom';
+
 import { Activity, ArrowDownRight, ArrowRight, ArrowUpRight, Bell, CalendarDays, ChevronDown, CircleHelp, Compass, Crosshair, Gamepad2, Globe2, Image, LogOut, Menu, Search, ShieldCheck, BadgeCheck, Swords, Trophy, Users, X, Zap } from 'lucide-react';
 import { api, dateTime, money, send } from './api.js';
 import { OGSymbol, XPSymbol } from './points-symbols.jsx';
@@ -60,17 +73,253 @@ function ScrollReset() { const { pathname } = useLocation(); useEffect(() => { w
 function Gate({ user, ready, role, children }) { const location = useLocation(); if (!ready) return <div className="page-loading"><span className="loader" />Loading your arena…</div>; if (!user) return <Navigate to={role === 'admin' ? '/pass/ads' : '/login'} state={{ from: location.pathname }} replace />; if (user.role !== role) return <Navigate to={user.role === 'admin' ? '/pass/ads/dashboard' : '/arena'} replace />; return children; }
 
 function Brand({ compact = false }) { return <Link className={`brand ${compact ? 'brand-compact' : ''}`} to="/" aria-label="Ocean Edge Games home"><span className="brand-mark"><img src="/images/oeg-emblem.png" alt="" /></span><span className="brand-name">OCEAN EDGE <b>GAMES</b></span></Link>; }
+
 function PublicLayout() {
-  const { user, setUser, toast } = useAuth(); const [open, setOpen] = useState(false); const location = useLocation();
-  useEffect(() => setOpen(false), [location.pathname]);
-  const logout = async () => { try { await send('/auth/logout', {}); } finally { setUser(null); toast('You have signed out.'); } };
-  return <><header className="site-header"><div className="shell header-inner"><Brand /><button className="mobile-menu" aria-label="Toggle navigation" onClick={() => setOpen(!open)}>{open ? <X /> : <Menu />}</button><nav className={open ? 'main-nav is-open' : 'main-nav'}>
-    <Link to="/tournaments">Tournaments</Link><Link to="/leaderboard">Leaderboard</Link><Link to="/players">Players</Link>
-    {user ? <><Link className="nav-arena" to={user.role === 'admin' ? '/pass/ads/dashboard' : '/arena'}>{user.role === 'admin' ? 'Console' : 'Arena Hub'} <ArrowUpRight size={14} /></Link><button className="nav-text-button" onClick={logout}>Sign out</button></> : <><Link to="/login" className="nav-login">Log in</Link><Link to="/register" className="button button-small">Create account <ArrowRight size={14} /></Link></>}
-  </nav></div></header>{user?.role==='player'&&<PlayerSubnav/>}<main><Outlet /></main><Footer /></>;
+  const { user, setUser, toast } = useAuth();
+  const [open, setOpen] = useState(false);
+  const location = useLocation();
+
+  useEffect(() => {
+    setOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+
+    document.addEventListener('keydown', handleEscape);
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+      document.body.style.overflow = '';
+    };
+  }, [open]);
+
+  const logout = async () => {
+    setOpen(false);
+
+    try {
+      await send('/auth/logout', {});
+    } finally {
+      setUser(null);
+      toast('You have signed out.');
+    }
+  };
+
+  const navigation = [
+    { to: '/tournaments', label: 'Tournaments', icon: Swords },
+    { to: '/leaderboard', label: 'Leaderboard', icon: Trophy },
+    { to: '/players', label: 'Players', icon: Users }
+  ];
+
+  return (
+    <>
+      <header className="site-header">
+        <div className="shell header-inner">
+
+          <Brand />
+
+          {/* Desktop centered navigation */}
+          <nav className="main-nav">
+            {navigation.map(({ to, label }) => (
+              <NavLink
+                key={to}
+                to={to}
+                className={({ isActive }) =>
+                  `nav-link ${isActive ? 'active' : ''}`
+                }
+              >
+                {label}
+              </NavLink>
+            ))}
+          </nav>
+
+          {/* Desktop account actions */}
+          <div className="header-actions">
+            {user ? (
+              <>
+                <NavLink
+                  to={user.role === 'admin' ? '/pass/ads/dashboard' : '/arena'}
+                  className="nav-arena"
+                >
+                  {user.role === 'admin' ? 'Console' : 'Arena Hub'}
+                  <ArrowUpRight size={15} />
+                </NavLink>
+
+                <button className="nav-logout" onClick={logout}>
+                  <LogOut size={15} />
+                  Sign out
+                </button>
+              </>
+            ) : (
+              <>
+                <Link to="/login" className="nav-login">
+                  Log in
+                </Link>
+
+                <Link to="/register" className="button button-small">
+                  Create account
+                  <ArrowRight size={15} />
+                </Link>
+              </>
+            )}
+          </div>
+
+          {/* Mobile menu button */}
+          <button
+            className={`mobile-menu ${open ? 'is-active' : ''}`}
+            onClick={() => setOpen(!open)}
+            aria-label={open ? 'Close navigation' : 'Open navigation'}
+            aria-expanded={open}
+            aria-controls="mobile-navigation"
+          >
+            {open ? <X size={22} /> : <Menu size={22} />}
+          </button>
+
+        </div>
+      </header>
+
+      {/* Mobile drawer and backdrop */}
+      {open && (
+        <>
+          <button
+            className="nav-backdrop"
+            aria-label="Close navigation"
+            onClick={() => setOpen(false)}
+          />
+
+          <aside
+            id="mobile-navigation"
+            className="mobile-drawer"
+          >
+            <div className="drawer-header">
+              <Brand />
+
+              <button
+                className="drawer-close"
+                onClick={() => setOpen(false)}
+                aria-label="Close navigation"
+              >
+                <X size={21} />
+              </button>
+            </div>
+
+            <div className="drawer-section-label">
+              EXPLORE
+              <span>OEG PLATFORM</span>
+            </div>
+
+            <nav className="drawer-navigation">
+              {navigation.map(({ to, label, icon: Icon }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  className={({ isActive }) =>
+                    `drawer-link ${isActive ? 'active' : ''}`
+                  }
+                >
+                  <Icon size={19} />
+                  <span>{label}</span>
+                  <ArrowUpRight size={15} className="drawer-arrow" />
+                </NavLink>
+              ))}
+            </nav>
+
+            <div className="drawer-divider" />
+
+            {user ? (
+              <div className="drawer-account">
+                <NavLink
+                  to={user.role === 'admin' ? '/pass/ads/dashboard' : '/arena'}
+                  className="drawer-arena"
+                >
+                  <Gamepad2 size={19} />
+                  <span>
+                    {user.role === 'admin' ? 'Admin Console' : 'Arena Hub'}
+                  </span>
+                  <ArrowUpRight size={15} />
+                </NavLink>
+
+                <button className="drawer-logout" onClick={logout}>
+                  <LogOut size={18} />
+                  Sign out
+                </button>
+              </div>
+            ) : (
+              <div className="drawer-auth">
+                <Link
+                  to="/login"
+                  className="drawer-login"
+                >
+                  Log in
+                </Link>
+
+                <Link
+                  to="/register"
+                  className="button drawer-register"
+                >
+                  Create account <ArrowRight size={15} />
+                </Link>
+              </div>
+            )}
+
+            <div className="drawer-footer">
+              <span>OCEAN EDGE GAMES</span>
+              <span>BUILT FOR THE ARENA.</span>
+            </div>
+          </aside>
+        </>
+      )}
+
+      {user?.role === 'player' && <PlayerSubnav />}
+
+      <main>
+        <Outlet />
+      </main>
+
+      <Footer />
+    </>
+  );
 }
 
-function PlayerSubnav(){return <div className="player-subnav"><nav className="shell">{[['/arena','Arena Hub'],['/tournaments','Tournaments'],['/teams','My Team'],['/matches','Matches'],['/rewards','Earned'],['/payments','Payments'],['/profile','Profile'],['/security','Security'],['/support','Support']].map(([to,label])=><Link to={to} key={to}>{label}</Link>)}</nav></div>;}
+
+function PlayerSubnav() {
+  const items = [
+    ['/arena', 'Arena Hub'],
+    ['/tournaments', 'Tournaments'],
+    ['/teams', 'My Team'],
+    ['/matches', 'Matches'],
+    ['/rewards', 'Earned'],
+    ['/payments', 'Payments'],
+    ['/profile', 'Profile'],
+    ['/security', 'Security'],
+    ['/support', 'Support']
+  ];
+
+  return (
+    <div className="player-subnav">
+      <nav className="shell">
+        {items.map(([to, label]) => (
+          <NavLink
+            key={to}
+            to={to}
+            end={to === '/arena'}
+            className={({ isActive }) =>
+              `player-nav-link ${isActive ? 'active' : ''}`
+            }
+          >
+            {label}
+          </NavLink>
+        ))}
+      </nav>
+    </div>
+  );
+}
+
 
 function Footer() { return <footer className="footer"><div className="shell footer-top"><div><Brand /><p>For the ones who queue up<br />and show up.</p></div><div className="footer-links"><div><span className="eyebrow">EXPLORE</span><Link to="/tournaments">Tournaments</Link><Link to="/leaderboard">Leaderboard</Link><Link to="/players">Players</Link></div><div><span className="eyebrow">THE PLATFORM</span><Link to="/terms">Terms & conditions</Link><Link to="/privacy">Privacy policy</Link><Link to="/support">Support</Link></div></div></div><div className="shell footer-bottom"><span>© {new Date().getFullYear()} Ocean Edge Games</span><span className="footer-location"><span className="status-dot" /> Built for the arena</span></div></footer>; }
 
