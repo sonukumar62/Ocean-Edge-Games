@@ -15,7 +15,7 @@ const otpLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHead
 const recoveryLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 5, standardHeaders: 'draft-8', legacyHeaders: false, message: { error: 'Too many recovery attempts. Try again later.' } });
 
 const emailSchema = z.string().trim().email().max(254).transform((value) => value.toLowerCase());
-const passwordSchema = z.string().min(10).max(128).refine((value) => /[a-z]/.test(value) && /[A-Z]/.test(value) && /\d/.test(value), 'Use at least 10 characters with upper and lower case letters and a number.');
+const passwordSchema = z.string().min(6, 'Password must be at least 6 characters.').max(128);
 const registerSchema = z.object({ email: emailSchema, password: passwordSchema, confirmPassword: z.string() }).refine((value) => value.password === value.confirmPassword, { path: ['confirmPassword'], message: 'Passwords do not match.' });
 const profileSchema = z.object({
   fullName: z.string().trim().min(2).max(80),

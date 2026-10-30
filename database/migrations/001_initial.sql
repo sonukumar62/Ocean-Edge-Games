@@ -107,6 +107,7 @@ create table if not exists tournaments (
   artwork_path text,
   timezone text not null default 'Asia/Kolkata',
   capacity integer check(capacity is null or capacity > 0),
+  b_registration integer not null default 0 check(b_registration >= 0),
   entry_fee_paise integer not null default 0 check(entry_fee_paise >= 0),
   currency text not null default 'INR' check(currency = 'INR'),
   prizes jsonb not null default '[]'::jsonb,
