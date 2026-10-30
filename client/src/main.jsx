@@ -108,7 +108,8 @@ function HeroArt() { return <div className="hero-art" aria-label="Professional e
 
 
 function TournamentCard({ tournament: t, index = 0 }) {
-  const displayedRegistrations = Number(t?.registration_count || 0);
+  const temporaryCount = useFakeRegistrationDisplayCount(t?.id);
+  const displayedRegistrations = Number(t?.registration_count || 0) + temporaryCount;
 
   const statusLabels = {
     registration_open: 'Registration open',
@@ -265,6 +266,7 @@ function TournamentDetail(){
   const state=useData(()=>api(`/tournaments/${slug}`).then(v=>v.tournament),[slug]);
   
 const {user,toast}=useAuth();
+const fakeRegistrationCount=useFakeRegistrationDisplayCount(state.data?.id);
 const navigate=useNavigate();
 const [teams,setTeams]=useState([]);
 const [teamId,setTeamId]=useState('');
@@ -276,6 +278,7 @@ const [activeDetailSection,setActiveDetailSection]=useState('prize-vault');
   if(state.loading)return <div className="shell page-shell"><Loading/></div>;
   if(state.error)return <div className="shell page-shell"><ErrorState message={state.error}/></div>;
   const t = state.data;
+const displayedRegistrations=Number(t.registration_count||0)+fakeRegistrationCount;
 const needsTeam = Number(t.participant_count) > 1;
 
 const fullDescription =

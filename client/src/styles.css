@@ -1887,3 +1887,5 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
     transition: none;
   }
 }
+
+.search-field:focus-within{border-color:#43c8ee;box-shadow:0 0 0 1px rgba(67,200,238,.22)}.search-field input:focus-visible{outline:none}
