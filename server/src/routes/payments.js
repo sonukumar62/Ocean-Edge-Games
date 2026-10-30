@@ -30,7 +30,7 @@ function gateway() {
   const id = process.env.RAZORPAY_KEY_ID;
   const secret = process.env.RAZORPAY_KEY_SECRET;
   if (process.env.RAZORPAY_MODE !== 'test' || !id?.startsWith('rzp_test_') || !secret) {
-    const error = new Error('Razorpay Test Mode is not configured. Set RAZORPAY_MODE=test and valid rzp_test credentials.');
+    const error = new Error('Online payment is temporarily unavailable. Your entry is saved as pending payment; try again later from Payments & rewards or contact tournament support.');
     error.status = 503;
     error.code = 'PAYMENTS_NOT_CONFIGURED';
     throw error;

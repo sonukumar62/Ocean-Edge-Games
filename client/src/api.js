@@ -28,12 +28,21 @@ export async function api(path, options = {}) {
     if (csrf) headers.set('x-csrf-token', csrf);
   }
 
-  const response = await fetch(apiUrl(path), {
-    ...requestOptions,
-    method,
-    headers,
-    credentials: 'include',
-  });
+  let response;
+  try {
+    response = await fetch(apiUrl(path), {
+      ...requestOptions,
+      method,
+      headers,
+      credentials: 'include',
+    });
+  } catch (cause) {
+    if (cause?.name === 'AbortError') throw cause;
+    const isPaymentStep = path.includes('/payments') || /\/tournaments\/[^/]+\/register/.test(path);
+    throw new Error(isPaymentStep
+      ? 'We could not reach the payment service. Check your connection and Payments & rewards before retrying. If you were charged, contact support with your registration number.'
+      : 'We could not reach Ocean Edge Games. Check your connection and try again.');
+  }
 
   const payload = response.status === 204
     ? null
@@ -56,7 +65,14 @@ export async function api(path, options = {}) {
   }
 
   if (!response.ok) {
-    const message = payload?.error || 'The request could not be completed.';
+    const paymentStep = path.includes('/payments') || /\/tournaments\/[^/]+\/register/.test(path);
+    const unavailable = [502, 503, 504].includes(response.status);
+    const fallback = unavailable
+      ? paymentStep
+        ? 'The payment service is temporarily unavailable. Check Payments & rewards before retrying; if you were charged, contact support with your registration number.'
+        : 'Ocean Edge Games is temporarily unavailable. Please try again shortly.'
+      : 'The request could not be completed.';
+    const message = payload?.error || fallback;
     const diagnostic = import.meta.env.DEV ? payload?.diagnostic : '';
     const error = new Error(
       diagnostic ? `${message} (${diagnostic})` : message

@@ -102,8 +102,11 @@ app.use((error, req, res, next) => {
   if (error.status && error.status < 500) return res.status(error.status).json({ error: error.message });
   const diagnostic = safeErrorSummary(error);
   console.error(`[api] ${req.method} ${req.path} failed (${diagnostic})`);
+  const paymentOrRegistration = req.originalUrl.startsWith('/api/payments') || /\/register(?:\?|$)/.test(req.originalUrl);
   res.status(500).json({
-    error: 'The request could not be completed.',
+    error: paymentOrRegistration
+      ? 'We could not finish this payment or registration step because of a temporary service error. Check Payments & rewards and your tournament entries before retrying. If money was deducted, contact support with your registration number.'
+      : 'We could not complete this request because of a temporary service error. Please try again, and contact support if it keeps happening.',
     ...(process.env.NODE_ENV === 'development' ? { diagnostic } : {}),
   });
 });

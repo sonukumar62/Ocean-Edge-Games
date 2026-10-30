@@ -550,8 +550,8 @@ platformRouter.post('/tournaments/:id/register', requirePlayer, async (req, res)
   const result = await withTransaction(async (client) => {
     const paymentSetting=await client.query("select value from site_settings where key='payment_configuration' for share");
     const selectedPayment=paymentSetting.rows[0]?.value||{method:'razorpay',upiId:'',qrPath:null};
-    const tournament = await client.query(`select t.id,t.name,t.status,t.start_at,t.registration_opens_at,t.registration_deadline,t.visibility_deadline,t.visibility_mode,t.capacity,t.entry_fee_paise,t.format_id,f.participant_count,f.name format_name
-      from tournaments t join game_formats f on f.id=t.format_id where t.id=$1 for update`, [req.params.id]);
+    const tournament = await client.query(`select t.id,t.name,t.status,t.start_at,t.registration_opens_at,t.registration_deadline,t.visibility_deadline,t.visibility_mode,t.capacity,t.entry_fee_paise,t.game_id,t.format_id,f.participant_count,f.name format_name,g.name game_name
+      from tournaments t join game_formats f on f.id=t.format_id join games g on g.id=t.game_id where t.id=$1 for update`, [req.params.id]);
     if (!tournament.rowCount) return { error: 'Tournament not found.', status: 404 };
     const t = tournament.rows[0];
     const now=new Date();
@@ -562,6 +562,8 @@ platformRouter.post('/tournaments/:id/register', requirePlayer, async (req, res)
     let participants;
     if (Number(t.participant_count) === 1) {
       if (teamId) return { error: 'This tournament accepts individual entries only.', status: 400 };
+      const gameAccount=await client.query('select 1 from player_game_accounts where user_id=$1 and game_id=$2',[userId(req),t.game_id]);
+      if(!gameAccount.rowCount)return {error:`Add your ${t.game_name} username or UID before registering. Go to Profile → Edit Profile → Game identities, add your game ID, then try again.`,status:409,code:'GAME_ACCOUNT_REQUIRED'};
       participants = [{ user_id: userId(req) }];
     } else {
       if (!teamId) return { error: 'Select a team before registering.', status: 400 };
@@ -571,6 +573,9 @@ platformRouter.post('/tournaments/:id/register', requirePlayer, async (req, res)
       if (members.rowCount+guests.rowCount !== Number(t.participant_count)) return { error: `The team must have ${t.participant_count} members before registering.`, status: 400 };
       if (!team.rows[0].leader_user_id || !members.rows.some((m) => m.user_id === team.rows[0].leader_user_id)) return { error: 'Assign a team leader before registering.', status: 400 };
       participants = [...members.rows,...guests.rows.map(guest=>({external_name:guest.display_name,external_handle:guest.external_handle}))];
+      const missingAccounts=await client.query(`select tm.user_id,p.username from team_members tm left join player_game_accounts ga on ga.user_id=tm.user_id and ga.game_id=$2 left join player_profiles p on p.user_id=tm.user_id where tm.team_id=$1 and ga.user_id is null order by tm.joined_at`,[teamId,t.game_id]);
+      if(missingAccounts.rows.some(member=>member.user_id===userId(req)))return {error:`Add your ${t.game_name} username or UID before registering. Go to Profile → Edit Profile → Game identities, add your game ID, then try again.`,status:409,code:'GAME_ACCOUNT_REQUIRED'};
+      if(missingAccounts.rowCount){const names=missingAccounts.rows.map(member=>member.username?`@${member.username}`:'a team member').join(', ');return {error:`These team members need to add their ${t.game_name} username or UID in Profile → Edit Profile → Game identities before you can register: ${names}.`,status:409,code:'TEAM_GAME_ACCOUNTS_REQUIRED'};}
     }
     await client.query(`update tournament_registrations set status='cancelled',payment_status='failed' where tournament_id=$1 and status='pending_payment' and reserved_until<=now()`, [t.id]);
     const duplicate = await client.query(`select 1 from tournament_registrations where tournament_id=$1 and (player_id=$2 or team_id=$3) and status in ('confirmed','pending_payment') and (reserved_until is null or reserved_until>now())`, [t.id, teamId ? null : userId(req), teamId]);
@@ -594,7 +599,7 @@ platformRouter.post('/tournaments/:id/register', requirePlayer, async (req, res)
     await notifyAdmin(client,'registration','Tournament registration',`REG-${String(registrationNumber).padStart(6,'0')} · ${reference} was created.`,`/pass/ads/registrations`);
     return { registration: inserted.rows[0], amountPaise: Number(t.entry_fee_paise), tournamentName: t.name,paymentMethod:method };
   });
-  if (result.error) return res.status(result.status || 400).json({ error: result.error });
+  if (result.error) return res.status(result.status || 400).json({ error: result.error, ...(result.code?{code:result.code}:{}) });
   res.status(201).json(result);
 });
 
