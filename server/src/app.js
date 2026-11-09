@@ -110,3 +110,5 @@ app.use((error, req, res, next) => {
     ...(process.env.NODE_ENV === 'development' ? { diagnostic } : {}),
   });
 });
+
+export default app;
