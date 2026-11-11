@@ -2502,3 +2502,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
     animation: none;
   }
 }
+
+/* Rank rewards now include a per-kill cash rate. */
+.rank-reward-row{grid-template-columns:minmax(110px,.9fr) repeat(4,minmax(90px,1fr)) auto}
+.admin-match-result-entry{grid-template-columns:minmax(0,1fr) 100px 84px auto}
+.admin-match-results-modal .admin-match-award-row{grid-template-columns:minmax(90px,.9fr) repeat(4,minmax(85px,1fr))}
+@media(max-width:740px){.rank-reward-row{grid-template-columns:repeat(2,minmax(0,1fr))}.admin-match-result-entry{grid-template-columns:minmax(0,1fr) 80px}.admin-match-result-entry>label{min-width:0}.admin-match-earned{grid-column:1/-1}.admin-match-results-modal .admin-match-award-row{grid-template-columns:1fr 1fr}}

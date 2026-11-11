@@ -798,6 +798,9 @@ return (
                           {Number(reward.cashPaise) > 0 && (
                             <span>{money(reward.cashPaise)}</span>
                           )}
+                          {Number(reward.perKillCashPaise) > 0 && (
+                            <span>{money(reward.perKillCashPaise)} / kill</span>
+                          )}
                           {Number(reward.ogPoints) > 0 && (
                             <span>
                               {Number(reward.ogPoints).toLocaleString('en-IN')} OG

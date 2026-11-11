@@ -12,7 +12,11 @@ const registrationTables = [
   'sessions',
   'admin_notifications',
 ];
-const requiredColumns = ['tournaments.priority_level'];
+const requiredColumns = [
+  'tournaments.priority_level',
+  'reward_rules.per_kill_cash_paise',
+  'match_results.kills',
+];
 
 // Load the certificate from the server environment.
 
@@ -84,7 +88,7 @@ export const pool = hasPostgresUrl
               ...(ca ? { ca } : {}),
             }
           : undefined,
-      max: 12,
+      max: Number(process.env.PG_POOL_MAX || 3),
       connectionTimeoutMillis: 10000,
     })
   : null;
